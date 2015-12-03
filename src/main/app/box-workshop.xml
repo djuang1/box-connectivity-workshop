@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting" xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns:tls="http://www.mulesoft.org/schema/mule/tls" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:box="http://www.mulesoft.org/schema/mule/box" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/box http://www.mulesoft.org/schema/mule/box/current/mule-box.xsd
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd">
+    <http:listener-config name="HTTP_Listener_Configuration" host="0.0.0.0" port="8081" doc:name="HTTP Listener Configuration"/>
+    <box:config name="Box" clientId="${box.id}" clientSecret="${box.secret}" doc:name="Box">
+        <box:oauth-callback-config domain="localhost" localPort="8082" remotePort="8082" path="callback"/>
+    </box:config>
+    <http:request-config name="HTTP_Request_Configuration" protocol="HTTPS" host="view-api.box.com" port="443" doc:name="HTTP Request Configuration">
+        <tls:context>
+            <tls:key-store type="jks" path="src/main/resources/keystore.jks" keyPassword="testing123!" password="testing123!"/>
+        </tls:context>
+    </http:request-config>
+    <flow name="box-workshopFlow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/auth" doc:name="HTTP"/>
+        <box:authorize config-ref="Box" doc:name="Authorize"/>
+        <box:get-folder config-ref="Box" doc:name="Get Folder"/>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+    </flow>
+    <flow name="add-folder-add-file">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/create" doc:name="HTTP"/>
+        <box:create-folder config-ref="Box" folderName="Workshop" doc:name="Create Folder"/>
+         
+        <box:upload-path config-ref="Box" doc:name="Upload File" filename="mule-esb.pdf" folderId="#[payload.id]" path="src/main/resources/mule-esb.pdf"/>
+        
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+            
+    </flow>
+    
+    <flow name="viewapi-post-document">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/document" doc:name="HTTP"/>
+        <set-property propertyName="Authorization" value="Token 57f38m85qjk2zfubjki71obf97t42n6x" doc:name="Authorization"/>
+        <set-property propertyName="Content-Type" value="application/json" doc:name="Content-Type"/>
+        <set-payload value="{&quot;url&quot; : &quot;https://www.mulesoft.com/sites/default/files/mule-esb.pdf&quot;}" mimeType="application/json" doc:name="Set Payload"/>
+        
+        <http:request config-ref="HTTP_Request_Configuration" path="/1/documents" method="POST" doc:name="HTTP"/>
+    </flow>
+    <flow name="viewapi-view-document">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/view" doc:name="HTTP"/>
+        <set-property propertyName="Authorization" value="Token 57f38m85qjk2zfubjki71obf97t42n6x" doc:name="Authorization"/>
+        <set-property propertyName="Content-Type" value="application/json" doc:name="Content-Type"/>
+        <set-payload value="{&quot;document_id&quot;: &quot;#[message.inboundProperties.'http.query.params'.id]&quot;}" doc:name="Set Payload"/>
+        <http:request config-ref="HTTP_Request_Configuration" path="/1/sessions" method="POST" doc:name="HTTP"/>
+        <set-property propertyName="Location" value="#[json:urls/view]" doc:name="Location"/>
+        <set-property propertyName="http.status" value="307" doc:name="Redirect"/>
+        
+    </flow>
+	 
+</mule>
